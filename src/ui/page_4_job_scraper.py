@@ -35,7 +35,7 @@ def run():
             with st.spinner("🔍 Scraping latest jobs from Karkidi..."):
                 scraper = JobScraperAgent()
                 state = {"job_data": None}
-                state = scraper.scrape_karkidi(state, pages=2)
+                state = scraper.scrape_karkidi(state,2)
                 jobs_df = state["job_data"]
                 if jobs_df.empty:
                     st.error("❌ No jobs scraped. Try again later.")
