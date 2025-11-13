@@ -1,5 +1,5 @@
 # smart_applier/agents/job_scraper_agent.py
-from typing import TypedDict, List, Dict, Any
+from typing import List, Dict, Any
 import pandas as pd
 from bs4 import BeautifulSoup
 import requests
@@ -9,14 +9,10 @@ from datetime import datetime
 from smart_applier.utils.path_utils import get_data_dirs, ensure_database_exists
 
 
-class JobScraperState(TypedDict):
-    job_data: pd.DataFrame
-
-
 class JobScraperAgent:
     """
-    Scrapes job listings from Karkidi and stores them in a session-safe SQLite database.
-    Compatible with Streamlit Cloud (no filesystem dependency).
+    Scrapes job listings from Karkidi and stores them in SQLite.
+    Works both locally & on Streamlit Cloud.
     """
 
     def __init__(self):
@@ -24,7 +20,6 @@ class JobScraperAgent:
         self.use_in_memory = paths["use_in_memory_db"]
         self.db_path = paths["db_path"]
 
-        # Ensure DB tables exist if using file-backed mode
         if not self.use_in_memory:
             ensure_database_exists()
 
@@ -32,7 +27,7 @@ class JobScraperAgent:
         self.base_url = "https://www.karkidi.com/Find-Jobs/{page}/all/India"
 
     # -----------------------------
-    # 🔗 DB connection helper
+    # DB connection helper
     # -----------------------------
     def _get_connection(self):
         if self.use_in_memory:
@@ -40,11 +35,10 @@ class JobScraperAgent:
             from smart_applier.database.db_setup import create_tables
             create_tables(conn)
             return conn
-        else:
-            return sqlite3.connect(self.db_path)
+        return sqlite3.connect(self.db_path)
 
     # -----------------------------
-    # 🧠 Scrape Karkidi jobs
+    # Main scraper: returns DataFrame
     # -----------------------------
     def scrape_karkidi(self, pages: int = 3) -> pd.DataFrame:
         jobs_list: List[Dict[str, Any]] = []
@@ -56,7 +50,7 @@ class JobScraperAgent:
             try:
                 response = requests.get(url, headers=self.headers, timeout=10)
                 if response.status_code != 200:
-                    print(f"⚠️ Failed to fetch page {page}: {response.status_code}")
+                    print(f"⚠️ Failed page {page}: {response.status_code}")
                     continue
 
                 soup = BeautifulSoup(response.content, "html.parser")
@@ -66,7 +60,7 @@ class JobScraperAgent:
                     try:
                         title = job.find("h4").get_text(strip=True)
                         company_tag = job.find("a", href=lambda x: x and "Employer-Profile" in x)
-                        company = company_tag.get_text(strip=True) if company_tag else "Unknown Company"
+                        company = company_tag.get_text(strip=True) if company_tag else ""
                         location = job.find("p").get_text(strip=True) if job.find("p") else ""
                         experience_tag = job.find("p", class_="emp-exp")
                         experience = experience_tag.get_text(strip=True) if experience_tag else ""
@@ -88,25 +82,24 @@ class JobScraperAgent:
                             "scraped_at": datetime.now().isoformat()
                         })
                     except Exception as e:
-                        print(f"⚠️ Error parsing job block: {e}")
+                        print(f"⚠️ Parse error: {e}")
                         continue
 
                 time.sleep(1)
+
             except Exception as e:
-                print(f"❌ Error fetching page {page}: {e}")
+                print(f"❌ Fetch error: {e}")
                 continue
 
         df_jobs = pd.DataFrame(jobs_list)
-        print(f"🟢 Scraper Agent: fetched {len(df_jobs)} jobs total")
 
         if not df_jobs.empty:
             self._save_to_db(df_jobs)
-            print(f"✅ {len(df_jobs)} jobs inserted into DB")
 
         return df_jobs
 
     # -----------------------------
-    # 💾 Store jobs in DB (session-safe)
+    # Save jobs to DB
     # -----------------------------
     def _save_to_db(self, df_jobs: pd.DataFrame):
         conn = self._get_connection()
@@ -144,7 +137,7 @@ class JobScraperAgent:
         conn.close()
 
     # -----------------------------
-    # 📤 Retrieve jobs
+    # Retrieve jobs
     # -----------------------------
     def fetch_jobs(self, limit: int = 20) -> pd.DataFrame:
         conn = self._get_connection()
