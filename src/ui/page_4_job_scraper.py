@@ -57,9 +57,9 @@ def run():
 
             # STEP 3: Skill Gap Analysis
             with st.spinner("📊 Skill gap analysis..."):
-                skill_agent = SkillGapAgent(selected_user_id)
+                profile = profile_agent.load_profile(selected_user_id)   # << FIX
+                skill_agent = SkillGapAgent(profile, jobs_df)            # << FIX
                 recs = skill_agent.get_recommendations()
-
                 if recs:
                     st.subheader("🧠 Missing Skills & Learning Resources")
                     for skill, resources in recs.items():
