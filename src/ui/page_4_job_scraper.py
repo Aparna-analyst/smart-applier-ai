@@ -4,6 +4,7 @@ import pandas as pd
 from smart_applier.agents.job_scraper_agent import JobScraperAgent
 from smart_applier.agents.job_matching_agent import JobMatchingAgent
 from smart_applier.agents.skill_gap_agent import SkillGapAgent
+from smart_applier.agents.resume_builder_agent import ResumeBuilderAgent
 from smart_applier.agents.resume_tailor_agent import ResumeTailorAgent
 from smart_applier.agents.profile_agent import UserProfileAgent
 from io import BytesIO
