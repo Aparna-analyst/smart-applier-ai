@@ -6,23 +6,11 @@ from typing import List, Dict, Any, Optional
 from smart_applier.utils.path_utils import get_data_dirs
 from smart_applier.database.db_setup import initialize_database
 
-
 # -----------------------------
-# Row factory: return dicts
+# Row factory → return dicts
 # -----------------------------
 def dict_factory(cursor, row):
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-
-
-# -----------------------------
-# Check if table.column exists
-# -----------------------------
-def column_exists(conn, table: str, column: str) -> bool:
-    cur = conn.cursor()
-    cur.execute(f"PRAGMA table_info({table})")
-    cols = [row[1] for row in cur.fetchall()]
-    return column in cols
-
 
 # -----------------------------
 # DB Connection Helper
@@ -38,40 +26,34 @@ def get_connection(in_memory: bool = False) -> sqlite3.Connection:
         return conn
 
     if db_path is None:
-        raise RuntimeError("db_path is not configured.")
+        raise RuntimeError("db_path is not configured (USE_IN_MEMORY_DB=1?)")
 
     first_time = not db_path.exists()
     conn = sqlite3.connect(db_path)
     conn.row_factory = dict_factory
 
-    # Create tables + migrations
-    initialize_database(conn)
+    if first_time:
+        initialize_database(conn)
 
     return conn
 
-
 # -----------------------------
-# PROFILES
+#  PROFILES
 # -----------------------------
 def insert_or_update_profile(user_id: str, profile_data: dict):
     conn = get_connection()
     cur = conn.cursor()
 
     profile_json = json.dumps(profile_data)
-    personal = profile_data.get("personal", {})
+    name = profile_data.get("personal", {}).get("name", "")
+    email = profile_data.get("personal", {}).get("email", "")
+    phone = profile_data.get("personal", {}).get("phone", "")
+    location = profile_data.get("personal", {}).get("location", "")
+    linkedin = profile_data.get("personal", {}).get("linkedin", "")
+    github = profile_data.get("personal", {}).get("github", "")
 
-    name = personal.get("name", "")
-    email = personal.get("email", "")
-    phone = personal.get("phone", "")
-    location = personal.get("location", "")
-    linkedin = personal.get("linkedin", "")
-    github = personal.get("github", "")
-
-    # Check if profile exists
     cur.execute("SELECT id FROM profiles WHERE user_id=?", (user_id,))
-    exists = cur.fetchone()
-
-    if exists:
+    if cur.fetchone():
         cur.execute("""
             UPDATE profiles
             SET name=?, email=?, phone=?, location=?, linkedin=?, github=?, data_json=?
@@ -90,11 +72,6 @@ def insert_or_update_profile(user_id: str, profile_data: dict):
 def get_profile(user_id: str) -> Optional[dict]:
     conn = get_connection()
     cur = conn.cursor()
-
-    # fallback for very old DBs that do not yet have data_json
-    if not column_exists(conn, "profiles", "data_json"):
-        return None
-
     cur.execute("SELECT data_json FROM profiles WHERE user_id=?", (user_id,))
     row = cur.fetchone()
     conn.close()
@@ -105,30 +82,24 @@ def get_profile(user_id: str) -> Optional[dict]:
 def list_profiles():
     conn = get_connection()
     cur = conn.cursor()
-
-    # auto-handle missing column
-    if column_exists(conn, "profiles", "data_json"):
-        cur.execute("""
-            SELECT user_id, name, email, data_json, created_at
-            FROM profiles
-            ORDER BY created_at DESC
-        """)
-    else:
-        cur.execute("""
-            SELECT user_id, name, email, created_at
-            FROM profiles
-            ORDER BY created_at DESC
-        """)
-
+    cur.execute("SELECT user_id, name, email,data_json, created_at FROM profiles ORDER BY created_at DESC")
     rows = cur.fetchall()
     conn.close()
     return rows
+
+# Compatibility
+def get_all_profiles():
+    return list_profiles()
 
 
 # -----------------------------
 # SCRAPED JOBS
 # -----------------------------
 def bulk_insert_scraped_jobs(jobs: List[Dict[str, Any]]) -> List[int]:
+    """
+    Insert jobs and return DB IDs in the SAME ORDER.
+    This ensures no NaN in db_id.
+    """
     if not jobs:
         return []
 
@@ -155,6 +126,7 @@ def bulk_insert_scraped_jobs(jobs: List[Dict[str, Any]]) -> List[int]:
 
     conn.commit()
     conn.close()
+
     return inserted_ids
 
 
@@ -168,7 +140,7 @@ def get_all_scraped_jobs(limit: int = 100):
 
 
 # -----------------------------
-# TOP MATCHED JOBS
+#  TOP MATCHED JOBS (SEPARATE TABLE)
 # -----------------------------
 def insert_top_matched(job_id: int, user_id: str, score: float):
     conn = get_connection()
@@ -182,6 +154,9 @@ def insert_top_matched(job_id: int, user_id: str, score: float):
 
 
 def get_latest_top_matched(limit: int = 50):
+    """
+    Join top_matched_jobs with scraped_jobs cleanly.
+    """
     conn = get_connection()
     cur = conn.cursor()
 
@@ -211,7 +186,7 @@ def get_latest_top_matched(limit: int = 50):
 
 
 # -----------------------------
-# RESUMES (PDF BLOB)
+#  RESUMES (PDF as BLOB)
 # -----------------------------
 def insert_resume(user_id: str, resume_type: str, file_name: str, pdf_blob: bytes):
     conn = get_connection()
@@ -240,3 +215,14 @@ def get_resume_blob(resume_id: int):
     row = cur.fetchone()
     conn.close()
     return row["pdf_blob"] if row else None
+# -----------------------------
+# Compatibility exports for UI
+# -----------------------------
+def get_all_profiles():
+    return list_profiles()
+
+def get_all_scraped_jobs_for_ui(limit: int = 100):
+    return get_all_scraped_jobs(limit)
+
+def get_all_resumes(limit: int = 100):
+    return list_resumes(limit)

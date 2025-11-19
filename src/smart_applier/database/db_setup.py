@@ -3,26 +3,20 @@ import sqlite3
 from pathlib import Path
 from smart_applier.utils.path_utils import get_data_dirs
 
-
 def get_db_path() -> Path:
     paths = get_data_dirs()
     db_path = paths["db_path"]
     if db_path is None:
-        db_path = paths["root"] / "smart_applier.db"
+        # fallback (shouldn't happen unless in-memory mode)
+        data_root = paths["root"]
+        db_path = data_root / "smart_applier.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
     return db_path
-
-
-def column_exists(cursor, table, column):
-    cursor.execute(f"PRAGMA table_info({table})")
-    cols = [row[1] for row in cursor.fetchall()]
-    return column in cols
-
 
 def create_tables(conn: sqlite3.Connection):
     cur = conn.cursor()
 
-    # --- Profiles Table ---
+    # Profiles - store full profile JSON
     cur.execute("""
     CREATE TABLE IF NOT EXISTS profiles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,11 +32,7 @@ def create_tables(conn: sqlite3.Connection):
     )
     """)
 
-    # 🔥 Auto-add new column if missing (fix for Streamlit Cloud)
-    if not column_exists(cur, "profiles", "data_json"):
-        cur.execute("ALTER TABLE profiles ADD COLUMN data_json TEXT")
-
-    # --- Scraped Jobs ---
+    # Raw scraped jobs
     cur.execute("""
     CREATE TABLE IF NOT EXISTS scraped_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +47,7 @@ def create_tables(conn: sqlite3.Connection):
     )
     """)
 
-    # --- Top Matched Jobs ---
+    # Top matched jobs: separate table (references scraped_jobs.id)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS top_matched_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +58,7 @@ def create_tables(conn: sqlite3.Connection):
     )
     """)
 
-    # --- Resumes ---
+    # Resumes - PDF stored as BLOB
     cur.execute("""
     CREATE TABLE IF NOT EXISTS resumes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,10 +72,12 @@ def create_tables(conn: sqlite3.Connection):
 
     conn.commit()
 
-
 def initialize_database(conn: sqlite3.Connection = None):
+    """
+    Initialize DB. If `conn` is provided, create tables there (useful for in-memory).
+    Otherwise create/open file-backed DB and initialize tables.
+    """
     created_here = False
-
     if conn is None:
         db_path = get_db_path()
         conn = sqlite3.connect(db_path)
@@ -95,5 +87,4 @@ def initialize_database(conn: sqlite3.Connection = None):
 
     if created_here:
         conn.close()
-
     print(f"✅ Database initialized at: {get_db_path()}")
