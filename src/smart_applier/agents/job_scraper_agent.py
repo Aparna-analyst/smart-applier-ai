@@ -1,45 +1,17 @@
-# smart_applier/agents/job_scraper_agent.py
+# src/smart_applier/agents/job_scraper_agent.py
 from typing import List, Dict, Any
 import pandas as pd
 from bs4 import BeautifulSoup
 import requests
 import time
-import sqlite3
 from datetime import datetime
-from smart_applier.utils.path_utils import get_data_dirs, ensure_database_exists
-
+from smart_applier.utils.db_utils import bulk_insert_scraped_jobs
 
 class JobScraperAgent:
-    """
-    Scrapes job listings from Karkidi and stores them in SQLite.
-    Works both locally & on Streamlit Cloud.
-    """
-
     def __init__(self):
-        paths = get_data_dirs()
-        self.use_in_memory = paths["use_in_memory_db"]
-        self.db_path = paths["db_path"]
-
-        if not self.use_in_memory:
-            ensure_database_exists()
-
         self.headers = {'User-Agent': 'Mozilla/5.0'}
         self.base_url = "https://www.karkidi.com/Find-Jobs/{page}/all/India"
 
-    # -----------------------------
-    # DB connection helper
-    # -----------------------------
-    def _get_connection(self):
-        if self.use_in_memory:
-            conn = sqlite3.connect(":memory:")
-            from smart_applier.database.db_setup import create_tables
-            create_tables(conn)
-            return conn
-        return sqlite3.connect(self.db_path)
-
-    # -----------------------------
-    # Main scraper: returns DataFrame
-    # -----------------------------
     def scrape_karkidi(self, pages: int = 3) -> pd.DataFrame:
         jobs_list: List[Dict[str, Any]] = []
 
@@ -50,7 +22,7 @@ class JobScraperAgent:
             try:
                 response = requests.get(url, headers=self.headers, timeout=10)
                 if response.status_code != 200:
-                    print(f"⚠️ Failed page {page}: {response.status_code}")
+                    print(f"⚠️ Failed to fetch page {page}: {response.status_code}")
                     continue
 
                 soup = BeautifulSoup(response.content, "html.parser")
@@ -58,9 +30,9 @@ class JobScraperAgent:
 
                 for job in job_blocks:
                     try:
-                        title = job.find("h4").get_text(strip=True)
+                        title = job.find("h4").get_text(strip=True) if job.find("h4") else ""
                         company_tag = job.find("a", href=lambda x: x and "Employer-Profile" in x)
-                        company = company_tag.get_text(strip=True) if company_tag else ""
+                        company = company_tag.get_text(strip=True) if company_tag else "Unknown Company"
                         location = job.find("p").get_text(strip=True) if job.find("p") else ""
                         experience_tag = job.find("p", class_="emp-exp")
                         experience = experience_tag.get_text(strip=True) if experience_tag else ""
@@ -82,65 +54,24 @@ class JobScraperAgent:
                             "scraped_at": datetime.now().isoformat()
                         })
                     except Exception as e:
-                        print(f"⚠️ Parse error: {e}")
+                        print(f"⚠️ Error parsing job block: {e}")
                         continue
 
                 time.sleep(1)
 
             except Exception as e:
-                print(f"❌ Fetch error: {e}")
+                print(f"❌ Error fetching page {page}: {e}")
                 continue
 
         df_jobs = pd.DataFrame(jobs_list)
+        print(f"🟢 Scraper Agent: fetched {len(df_jobs)} jobs total")
 
-        if not df_jobs.empty:
-            self._save_to_db(df_jobs)
+        if df_jobs.empty:
+            return df_jobs
+
+        # Save to DB and get actual DB IDs
+        inserted_ids = bulk_insert_scraped_jobs(jobs_list)
+        df_jobs["db_id"] = inserted_ids
+        print(f"🟢 Assigned DB IDs to scraped jobs ({len(inserted_ids)} rows)")
 
         return df_jobs
-
-    # -----------------------------
-    # Save jobs to DB
-    # -----------------------------
-    def _save_to_db(self, df_jobs: pd.DataFrame):
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS scraped_jobs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT,
-                company TEXT,
-                location TEXT,
-                experience TEXT,
-                skills TEXT,
-                summary TEXT,
-                posted_on TEXT,
-                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        for _, row in df_jobs.iterrows():
-            cursor.execute("""
-                INSERT INTO scraped_jobs (title, company, location, experience, skills, summary, posted_on)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                row["title"],
-                row["company"],
-                row["location"],
-                row["experience"],
-                row["skills"],
-                row["summary"],
-                row["posted_on"],
-            ))
-
-        conn.commit()
-        conn.close()
-
-    # -----------------------------
-    # Retrieve jobs
-    # -----------------------------
-    def fetch_jobs(self, limit: int = 20) -> pd.DataFrame:
-        conn = self._get_connection()
-        df = pd.read_sql_query(f"SELECT * FROM scraped_jobs ORDER BY id DESC LIMIT {limit}", conn)
-        conn.close()
-        return df

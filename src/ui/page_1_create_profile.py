@@ -1,76 +1,127 @@
 # ui/page_1_create_profile.py
 import streamlit as st
-import json
-from io import BytesIO
 from smart_applier.agents.profile_agent import UserProfileAgent
+from smart_applier.utils.db_utils import list_profiles, get_profile
 
 def run():
-    st.title("🧠 Create Your Smart Applier Profile")
-    st.caption("Build your professional data once — use it for resumes, job matching, and tailoring.")
+    st.title("Create / Update Your Smart Applier Profile")
+    st.caption("Your profile will be saved and auto-filled whenever you come back.")
 
     profile_agent = UserProfileAgent()
 
-    # -------------------------
-    # Personal Details
-    # -------------------------
-    st.header("👤 Personal Information")
+    # ------------------------------------------------------
+    # LOAD EXISTING PROFILE (prefill if available)
+    # ------------------------------------------------------
+    stored_profiles = list_profiles()
+    existing_profile = None
+
+    if stored_profiles:
+        user_id = stored_profiles[0]["user_id"]
+        existing_profile = get_profile(user_id)
+
+    # Extract safely
+    personal = existing_profile.get("personal", {}) if existing_profile else {}
+    education_list = existing_profile.get("education", []) if existing_profile else []
+    experience_list = existing_profile.get("experience", []) if existing_profile else []
+    achievements_list = existing_profile.get("achievements", []) if existing_profile else []
+    certificates_list_existing = existing_profile.get("certificates", []) if existing_profile else []
+    projects_list_existing = existing_profile.get("projects", []) if existing_profile else []
+    skills_existing = existing_profile.get("skills", {}) if existing_profile else {}
+
+    # ------------------------------------------------------
+    # PERSONAL DETAILS
+    # ------------------------------------------------------
+    st.header("Personal Information")
     col1, col2 = st.columns(2)
     with col1:
-        name = st.text_input("Full Name")
-        email = st.text_input("Email")
-        phone = st.text_input("Phone Number")
+        name = st.text_input("Full Name", value=personal.get("name", ""))
+        email = st.text_input("Email", value=personal.get("email", ""))
+        phone = st.text_input("Phone Number", value=personal.get("phone", ""))
+
     with col2:
-        location = st.text_input("Location (City, State)")
-        github = st.text_input("GitHub URL")
-        linkedin = st.text_input("LinkedIn URL")
+        location = st.text_input("Location (City, State)", value=personal.get("location", ""))
+        github = st.text_input("GitHub URL", value=personal.get("github", ""))
+        linkedin = st.text_input("LinkedIn URL", value=personal.get("linkedin", ""))
 
-    # -------------------------
-    # Resume Upload (optional)
-    # -------------------------
-    st.header("📄 Resume Upload (Optional)")
-    uploaded_resume = st.file_uploader("Upload your resume (PDF or DOCX)", type=["pdf", "docx"])
-    resume_bytes = None
-    resume_filename = None
-    if uploaded_resume:
-        resume_bytes = uploaded_resume.getvalue()
-        resume_filename = uploaded_resume.name
-        st.success(f"✅ {resume_filename} uploaded successfully!")
+    # ------------------------------------------------------
+    # RESUME UPLOAD
+    # ------------------------------------------------------
+    #st.header("Resume Upload (Optional)")
+    #resume_bytes = None
+    #resume_filename = None
 
-    # -------------------------
-    # Education
-    # -------------------------
-    st.header("🎓 Education")
+    #uploaded = st.file_uploader("Upload your resume (PDF or DOCX)", type=["pdf", "docx"])
+
+    #if uploaded:
+        #resume_bytes = uploaded.getvalue()
+        #resume_filename = uploaded.name
+        #st.success(f"{resume_filename} uploaded successfully!")
+    #else:
+        # Keep previously saved resume name (not re-uploaded)
+        #resume_filename = personal.get("resume_name", None)
+
+    # ------------------------------------------------------
+    # EDUCATION
+    # ------------------------------------------------------
+    st.header("Education")
     education = st.text_area(
         "List your education (one per line):",
-        placeholder="M.Sc. Computer Science, Digital University Kerala (2026)"
+        value="\n".join(education_list)
     )
 
-    # -------------------------
-    # Skills
-    # -------------------------
-    st.header("💡 Skills")
+    # ------------------------------------------------------
+    # SKILLS
+    # ------------------------------------------------------
+    st.header("Skills")
     st.info("Organize your skills by category — e.g., Programming, Tools, ML, Soft Skills.")
-    num_categories = st.number_input("Number of skill categories", min_value=1, max_value=10, value=3, step=1)
+
+    existing_categories = list(skills_existing.keys())
+
+    num_categories = st.number_input(
+        "Number of skill categories",
+        min_value=1, max_value=10,
+        value=len(existing_categories) if existing_categories else 3
+    )
 
     skills_dict = {}
+
     for i in range(int(num_categories)):
         st.subheader(f"Category {i+1}")
-        category = st.text_input(f"Category Name", key=f"cat_{i}")
-        skills = st.text_input(f"Skills (comma-separated)", key=f"skills_{i}")
+
+        default_category = existing_categories[i] if i < len(existing_categories) else ""
+        default_skills = ", ".join(skills_existing.get(default_category, [])) if default_category else ""
+
+        category = st.text_input("Category Name", key=f"cat_{i}", value=default_category)
+        skills = st.text_input("Skills (comma-separated)", key=f"skills_{i}", value=default_skills)
+
         if category:
             skills_dict[category] = [s.strip() for s in skills.split(",") if s.strip()]
 
-    # -------------------------
-    # Projects
-    # -------------------------
-    st.header("🚀 Projects")
-    num_projects = st.number_input("Number of projects", min_value=1, max_value=10, value=1, step=1)
+    # ------------------------------------------------------
+    # PROJECTS
+    # ------------------------------------------------------
+    st.header("Projects")
+
+    num_projects = st.number_input(
+        "Number of projects",
+        min_value=1, max_value=10,
+        value=len(projects_list_existing) if projects_list_existing else 1
+    )
+
     projects_list = []
     for i in range(int(num_projects)):
         st.subheader(f"Project {i+1}")
-        title = st.text_input(f"Title", key=f"proj_title_{i}")
-        proj_skills = st.text_input(f"Skills (comma-separated)", key=f"proj_skills_{i}")
-        desc = st.text_area(f"Description", key=f"proj_desc_{i}")
+
+        existing_proj = projects_list_existing[i] if i < len(projects_list_existing) else {}
+
+        title = st.text_input("Title", key=f"proj_title_{i}", value=existing_proj.get("title", ""))
+        proj_skills = st.text_input(
+            "Skills (comma-separated)",
+            key=f"proj_skills_{i}",
+            value=", ".join(existing_proj.get("skills", []))
+        )
+        desc = st.text_area("Description", key=f"proj_desc_{i}", value=existing_proj.get("description", ""))
+
         if title:
             projects_list.append({
                 "title": title,
@@ -78,70 +129,72 @@ def run():
                 "description": desc
             })
 
-    # -------------------------
-    # Experience
-    # -------------------------
-    st.header("💼 Experience")
-    experience = st.text_area("Describe your relevant experience (one per line)")
+    # ------------------------------------------------------
+    # EXPERIENCE
+    # ------------------------------------------------------
+    st.header("Experience")
+    experience = st.text_area(
+        "Describe your relevant experience (one per line)",
+        value="\n".join(experience_list)
+    )
 
-    # -------------------------
-    # Certificates & Achievements
-    # -------------------------
-    st.header("🏅 Certificates & Achievements")
-    num_certificates = st.number_input("Number of certificates", min_value=0, max_value=10, value=0, step=1)
+    # ------------------------------------------------------
+    # CERTIFICATES & ACHIEVEMENTS
+    # ------------------------------------------------------
+    st.header("Certificates & Achievements")
+
+    num_certificates = st.number_input(
+        "Number of certificates",
+        min_value=0, max_value=10,
+        value=len(certificates_list_existing)
+    )
+
     certificates_list = []
     for i in range(int(num_certificates)):
-        st.subheader(f"Certificate {i+1}")
-        cert_name = st.text_input(f"Certificate Name", key=f"cert_name_{i}")
-        cert_source = st.text_input(f"Issued By", key=f"cert_source_{i}")
+        existing = certificates_list_existing[i] if i < len(certificates_list_existing) else {}
+        cert_name = st.text_input("Certificate Name", key=f"cert_name_{i}", value=existing.get("name", ""))
+        cert_source = st.text_input("Issued By", key=f"cert_source_{i}", value=existing.get("source", ""))
+
         if cert_name:
-            certificates_list.append({
-                "name": cert_name,
-                "source": cert_source
-            })
+            certificates_list.append({"name": cert_name, "source": cert_source})
 
-    achievements = st.text_area("Achievements (one per line)")
+    achievements = st.text_area(
+        "Achievements (one per line)",
+        value="\n".join(achievements_list)
+    )
 
-    # -------------------------
-    # Save Button
-    # -------------------------
-    if st.button("💾 Save Profile"):
+    # ------------------------------------------------------
+    # SAVE PROFILE BUTTON
+    # ------------------------------------------------------
+    if st.button("Save Profile"):
         if not email:
-            st.error("⚠️ Please enter your email before saving.")
-        else:
-            user_id = email.split("@")[0]
-            profile_data = {
-                "personal": {
-                    "name": name,
-                    "email": email,
-                    "phone": phone,
-                    "location": location,
-                    "github": github,
-                    "linkedin": linkedin,
-                    "resume_name": resume_filename,
-                },
-                "education": [e.strip() for e in education.splitlines() if e.strip()],
-                "skills": skills_dict,
-                "projects": projects_list,
-                "experience": [e.strip() for e in experience.splitlines() if e.strip()],
-                "certificates": certificates_list,
-                "achievements": [a.strip() for a in achievements.splitlines() if a.strip()],
-            }
+            st.error("Please enter your email before saving.")
+            return
 
-            try:
-                profile_agent.save_profile(profile_data, user_id)
-                st.session_state["profile_data"] = profile_data  # 🧠 store in session
-                st.success(f"✅ Profile saved successfully for `{user_id}`")
+        user_id = email.split("@")[0]
 
-                with st.expander("🔍 View Profile JSON"):
-                    st.json(profile_data)
+        profile_data = {
+            "personal": {
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "location": location,
+                "github": github,
+                "linkedin": linkedin
+            },
+            "education": [e.strip() for e in education.splitlines() if e.strip()],
+            "skills": skills_dict,
+            "projects": projects_list,
+            "experience": [e.strip() for e in experience.splitlines() if e.strip()],
+            "certificates": certificates_list,
+            "achievements": [a.strip() for a in achievements.splitlines() if a.strip()],
+        }
 
-                if resume_bytes:
-                    st.download_button(
-                        label="⬇️ Download Uploaded Resume",
-                        data=resume_bytes,
-                        file_name=resume_filename,
-                    )
+        try:
+            profile_agent.save_profile(profile_data, user_id)
+            st.session_state["profile_data"] = profile_data
 
-            except Exception as e:
-                st.error(f"❌ Failed to save profile: {e}")
+            st.success(f"Profile saved successfully for `{user_id}`")
+
+        except Exception as e:
+            st.error(f"❌ Failed to save profile: {e}")

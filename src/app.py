@@ -2,96 +2,101 @@ import streamlit as st
 import os
 from pathlib import Path
 
-# 🧩 Database setup
-from smart_applier.database.db_setup import initialize_database, load_sample_data
+# Database setup
+from smart_applier.database.db_setup import initialize_database
 from smart_applier.utils.path_utils import get_data_dirs
 
-# ✅ Ensure database exists on first run (Cloud-safe)
+# Ensure database exists on first run
 paths = get_data_dirs()
 db_path = paths["root"] / "smart_applier.db"
+
 if not db_path.exists():
     os.makedirs(paths["root"], exist_ok=True)
-    print("🧩 Creating database...")
+    print("Creating database...")
     initialize_database()
-    load_sample_data()  # optional demo data for first-time users
 
-# 🧩 Import all UI page modules
+# Import UI pages
 from ui import (
     page_1_create_profile,
     page_2_resume_builder,
     page_3_external_jd,
     page_4_job_scraper,
     page_5_skill_gap_analyzer,
-    page_6_db_viewer,
+    page_6_dashboard
 )
 
 # -------------------------
-# 🧠 Streamlit Configuration
+# Streamlit Configuration
 # -------------------------
 st.set_page_config(
-    page_title="Smart Applier AI",
-    page_icon="🧩",
+    page_title="Nexara AI",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # -------------------------
-# 🌱 Initialize Session State
+# Setup Session State
 # -------------------------
 if "profile_data" not in st.session_state:
     st.session_state["profile_data"] = None
-if "job_data" not in st.session_state:
-    st.session_state["job_data"] = None
-if "matched_jobs" not in st.session_state:
-    st.session_state["matched_jobs"] = None
+
+if "page" not in st.session_state:
+    st.session_state["page"] = "Dashboard"
+
 
 # -------------------------
-# 🧠 App Header
+# App Header
 # -------------------------
 st.markdown(
     """
     <div style="text-align:center; margin-bottom: 10px;">
-        <h1 style="color:#003366;">🧠 Smart Applier AI</h1>
-        <p style="font-size:17px;">Your Intelligent Career Assistant — build, match, tailor, and upskill with AI.</p>
+        <h1 style="color:#003366; font-size:75px;">Nexara AI</h1>
+        <p style="font-size:25px; font-weight:bold;">A Platform for the Future— build, match, tailor, and upskill with AI.</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 # -------------------------
-# 📂 Sidebar Navigation
+# Sidebar Navigation
 # -------------------------
-st.sidebar.header("🔍 Navigation")
-page = st.sidebar.radio(
+st.sidebar.header(" Navigation")
+
+selected = st.sidebar.radio(
     "Choose a section:",
     [
+        "Dashboard",
         "Create Profile",
         "Resume Builder",
         "External JD Flow",
         "Job Scraper Flow",
-        "Skill Gap Analyzer",
-        "Database Viewer (Admin)",
+        "Skill Gap Analyzer"
     ],
-    index=0
+    index=["Dashboard", "Create Profile", "Resume Builder",
+           "External JD Flow", "Job Scraper Flow", "Skill Gap Analyzer"].index(st.session_state["page"])
 )
 
+# Keep sidebar & programmatic navigation in sync
+st.session_state["page"] = selected
+
 # -------------------------
-# 🚀 Page Routing
+# Page Routing
 # -------------------------
-if page == "Create Profile":
+if st.session_state["page"] == "Dashboard":
+    page_6_dashboard.run()
+
+elif st.session_state["page"] == "Create Profile":
     page_1_create_profile.run()
 
-elif page == "Resume Builder":
+elif st.session_state["page"] == "Resume Builder":
     page_2_resume_builder.run()
 
-elif page == "External JD Flow":
+elif st.session_state["page"] == "External JD Flow":
     page_3_external_jd.run()
 
-elif page == "Job Scraper Flow":
+elif st.session_state["page"] == "Job Scraper Flow":
     page_4_job_scraper.run()
 
-elif page == "Skill Gap Analyzer":
+elif st.session_state["page"] == "Skill Gap Analyzer":
     page_5_skill_gap_analyzer.run()
-
-elif page == "Database Viewer (Admin)":
-    page_6_db_viewer.run()

@@ -1,97 +1,138 @@
 # ui/page_3_external_jd.py
 import streamlit as st
-import io
+import os
+import base64
+
 from smart_applier.agents.resume_tailor_agent import ResumeTailorAgent
 from smart_applier.agents.resume_builder_agent import ResumeBuilderAgent
 from smart_applier.agents.profile_agent import UserProfileAgent
-import os
+from smart_applier.utils.db_utils import insert_resume
+
 
 def run():
-    st.title("🧩 External JD Tailoring")
-    st.caption("Paste a job description — Smart Applier will analyze and tailor your resume using Gemini & Semantic AI.")
+    st.title("External JD Tailoring")
+    st.caption("Paste a job description and generate a tailored resume.")
 
     # -------------------------
-    # Step 1: Load Profiles
+    # Load Profiles
     # -------------------------
     profile_agent = UserProfileAgent()
     profiles_meta = profile_agent.list_profiles()
 
     if not profiles_meta:
-        st.warning("⚠️ No profiles found. Please create one on the 'Create Profile' page first.")
+        st.warning("No profiles found. Please create one first.")
         return
 
-    profile_labels = [f"{p.get('name', 'Unknown')} ({p.get('user_id')})" for p in profiles_meta]
-    selected_label = st.selectbox("Select Profile", profile_labels)
-    selected_user_id = profiles_meta[profile_labels.index(selected_label)]["user_id"]
+    labels = [f"{p.get('name', 'Unknown')} ({p.get('user_id')})" for p in profiles_meta]
+    selected_label = st.selectbox("Select Profile", labels)
+    selected_user_id = profiles_meta[labels.index(selected_label)]["user_id"]
 
     # -------------------------
-    # Step 2: Paste Job Description
+    # Paste Job Description
     # -------------------------
-    jd_text = st.text_area("Paste Job Description Here", height=250, placeholder="Copy a job description from LinkedIn, Karkidi, etc.")
+    jd_text = st.text_area("Paste Job Description", height=250)
+
     if not jd_text.strip():
-        st.info("💡 Paste a job description to begin tailoring.")
+        st.info("Paste a job description to begin.")
         return
 
     # -------------------------
-    # Step 3: Tailor Resume
+    # Tailor Resume
     # -------------------------
-    if st.button("✨ Tailor Resume"):
-        with st.spinner("Analyzing and tailoring your resume..."):
-            try:
+    if st.button("Tailor Resume"):
+        try:
+            with st.spinner("Analyzing and generating tailored resume..."):
                 profile = profile_agent.load_profile(selected_user_id)
                 if not profile:
-                    st.error("❌ Could not load profile from database.")
+                    st.error("Could not load profile.")
                     return
 
-                # Ensure API key is available
                 if not os.getenv("GEMINI_API_KEY"):
-                    st.error("⚠️ Missing Gemini API Key! Please set GEMINI_API_KEY in your environment or Streamlit secrets.")
+                    st.error("Missing Gemini API Key. Set GEMINI_API_KEY in your environment.")
                     return
 
                 tailorer = ResumeTailorAgent()
 
-                # 🧠 Step 1: Extract JD keywords using Gemini
+                # Step 1: Extract keywords
                 cleaned = tailorer.clean_job_description(jd_text)
                 jd_keywords = [k.strip() for k in str(cleaned).split(",") if k.strip()]
 
+                # Fallback extraction
                 if not jd_keywords:
                     jd_keywords = [w for w in jd_text.split() if len(w) > 3]
-                    st.warning("⚠️ Gemini returned no structured skills — using fallback keyword extraction.")
+                    st.warning("Keyword extraction fallback used.")
 
-                st.caption(f"🧩 Extracted Keywords: {', '.join(jd_keywords[:15])}...")
-
-                # 🧮 Step 2: Compare skills
-                user_skills = [s.lower() for sub in profile.get("skills", {}).values() for s in sub]
+                # Step 2: Compare skills
+                user_skills = [
+                    s.lower()
+                    for sub in profile.get("skills", {}).values()
+                    for s in sub
+                ]
                 matched_skills = tailorer.compare_skills(jd_keywords, user_skills)
-                coverage = (len(matched_skills) / len(jd_keywords)) * 100 if jd_keywords else 0
-                st.text(f"🎯 Match Coverage: {coverage:.1f}% ({len(matched_skills)} matched / {len(jd_keywords)})")
 
-                # 💫 Step 3: Refine with Gemini
-                refined_profile = tailorer.refine_with_gemini(profile, jd_keywords, matched_skills, coverage)
+                coverage = 0
+                if jd_keywords:
+                    coverage = (len(matched_skills) / len(jd_keywords)) * 100
+
+                # Step 3: Refine profile using Gemini AI
+                refined_profile = tailorer.refine_with_gemini(
+                    profile, jd_keywords, matched_skills, coverage
+                )
+
                 if not isinstance(refined_profile, dict):
+                    st.warning("Gemini returned invalid output. Using original profile.")
                     refined_profile = profile
-                    st.warning("⚠️ Gemini returned invalid data — using base profile.")
 
-                # 📄 Step 4: Build Tailored Resume
+                # Step 4: Build Tailored Resume
                 builder = ResumeBuilderAgent(refined_profile)
                 buffer = builder.build_resume()
                 pdf_bytes = buffer.getvalue()
 
-                st.success("✅ Tailored Resume Generated Successfully!")
+                st.success("Tailored Resume Generated Successfully")
+
+                # -------------------------
+                # 1️⃣ Download Button
+                # -------------------------
                 st.download_button(
-                    label="⬇️ Download Tailored Resume PDF",
+                    label="Download Tailored Resume PDF",
                     data=pdf_bytes,
                     file_name=f"{selected_user_id}_Tailored_Resume.pdf",
                     mime="application/pdf",
                 )
 
-                # Optional Preview
-                if len(pdf_bytes) < 2_000_000:
-                    st.pdf(buffer)
+                # -------------------------
+                # 2️⃣ Inline Preview
+                # -------------------------
+                try:
+                    base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
+                    pdf_display = f"""
+                        <iframe 
+                            src="data:application/pdf;base64,{base64_pdf}" 
+                            width="100%" height="700px">
+                        </iframe>
+                    """
+                    st.markdown("### 📄 Tailored Resume Preview")
+                    st.markdown(pdf_display, unsafe_allow_html=True)
+                except Exception as e:
+                    st.warning(f"Could not preview PDF inline: {e}")
 
-                # Cache result in session
+                # -------------------------
+                # 3️⃣ Save to DB
+                # -------------------------
+                try:
+                    insert_resume(
+                        user_id=selected_user_id,
+                        resume_type="tailored",
+                        file_name=f"{selected_user_id}_Tailored_Resume.pdf",
+                        pdf_blob=pdf_bytes
+                    )
+                    st.success("Tailored resume saved to the system.")
+                except Exception as e:
+                    st.error(f"Could not save tailored resume to database: {e}")
+
+                # Save to session state
                 st.session_state["tailored_profile"] = refined_profile
                 st.session_state["tailored_resume"] = pdf_bytes
 
-            except Exception as e:
-                st.error(f"❌ Tailoring failed: {e}")
+        except Exception as e:
+            st.error(f"Tailoring failed: {e}")

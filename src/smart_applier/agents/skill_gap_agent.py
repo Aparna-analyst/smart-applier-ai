@@ -25,7 +25,7 @@ class SkillGapAgent:
         if self.use_gemini:
             try:
                 genai.configure(api_key=self.api_key)
-                self.model_name = "gemini-2.5-flash"
+                self.model_name = "gemini-2.0-flash"
             except Exception as e:
                 print(f"⚠️ Gemini setup failed: {e}")
                 self.use_gemini = False
