@@ -58,7 +58,7 @@ def run():
             else:
                 st.subheader("Missing Skills & Learning Recommendations")
                 for skill, resources in recs.items():
-                    st.markdown(f"** {skill.title()}**")
+                    st.markdown(f"{skill.title()}")
                     for r in resources:
                         st.write(f"- {r}")
 
