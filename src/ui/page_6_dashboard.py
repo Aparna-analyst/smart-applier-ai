@@ -19,7 +19,9 @@ def run():
     st.caption("A clean overview of your profile, skills, jobs, and progress.")
     st.divider()
 
-    # ---------------- PROFILE LOAD ----------------
+    # ------------------------------------------------------
+    # LOAD MOST RECENT PROFILE
+    # ------------------------------------------------------
     profiles = list_profiles()
     if not profiles:
         st.info("No profile found. Please create your profile first.")
@@ -30,7 +32,9 @@ def run():
     profile = get_profile(user_id)
     personal = profile.get("personal", {})
 
-    # ---------------- PROFILE CARD ----------------
+    # ------------------------------------------------------
+    # PROFILE CARD
+    # ------------------------------------------------------
     st.subheader("Profile Overview")
 
     col1, col2 = st.columns([1, 2])
@@ -38,7 +42,8 @@ def run():
     with col1:
         st.markdown(
             f"""
-            <div style='padding:18px; border-radius:12px; background:#f7f7f7; border:1px solid #eee;'>
+            <div style='padding:18px; border-radius:12px; 
+                        background:#f7f7f7; border:1px solid #eee;'>
                 <h3 style="margin-bottom:5px;">{personal.get("name","")}</h3>
                 <p style="margin:0; color:#555;">{personal.get("email","")}</p>
                 <p style="margin:0; color:#777;">{personal.get("location","")}</p>
@@ -50,7 +55,8 @@ def run():
     with col2:
         st.markdown(
             f"""
-            <div style='padding:18px; border-radius:12px; background:#f7f7f7; border:1px solid #eee;'>
+            <div style='padding:18px; border-radius:12px; 
+                        background:#f7f7f7; border:1px solid #eee;'>
                 <p><b>Phone:</b> {personal.get("phone","")}</p>
                 <p><b>GitHub:</b> {personal.get("github","")}</p>
                 <p><b>LinkedIn:</b> {personal.get("linkedin","")}</p>
@@ -61,23 +67,23 @@ def run():
 
     st.divider()
 
-    # =====================================================
-    #   CLEAN TABLES FOR EACH RESUME CATEGORY
-    # =====================================================
+    # ======================================================
+    # RESUME SECTION
+    # ======================================================
     st.subheader("Your Resumes")
 
     resumes = list_resumes()
 
     if resumes:
 
-        # Map DB values → categories
+        # Categorize resumes cleanly
         basic_resumes = [r for r in resumes if r["resume_type"] == "generated"]
         tailored_matched = [r for r in resumes if r["resume_type"] == "tailored_matched_job"]
         tailored_external = [r for r in resumes if r["resume_type"] == "tailored"]
 
         colA, colB, colC = st.columns(3)
 
-        # Helper to create download links safely
+        # Reusable block for resume download links
         def render_resume_links(resume_list):
             if not resume_list:
                 return "None"
@@ -88,26 +94,24 @@ def run():
                 if blob:
                     b64 = base64.b64encode(blob).decode()
 
-                    link = (
-                        f"<a href='data:application/pdf;base64,{b64}' "
-                        f"download='{r['file_name']}' "
-                        f"style='color:#0066cc; text-decoration:none; font-size:15px;'>"
-                        f"{r['file_name']}</a>"
-                    )
-                    html += link + "<br>"
+                    link = f"""
+                        <a href='data:application/pdf;base64,{b64}' 
+                           download='{r['file_name']}'
+                           style='color:#0066cc; text-decoration:none; font-size:15px;'>
+                           {r['file_name']}
+                        </a><br>
+                    """
+                    html += link
             return html
 
-        # ---------------- BASIC RESUME ----------------
         with colA:
             st.markdown("### Basic Resume")
             st.markdown(render_resume_links(basic_resumes), unsafe_allow_html=True)
 
-        # ---------------- TOP MATCHED TAILORED ----------------
         with colB:
             st.markdown("### Tailored – Top Matched Job")
             st.markdown(render_resume_links(tailored_matched), unsafe_allow_html=True)
 
-        # ---------------- EXTERNAL JD TAILORED ----------------
         with colC:
             st.markdown("### Tailored – External JD")
             st.markdown(render_resume_links(tailored_external), unsafe_allow_html=True)
@@ -117,7 +121,9 @@ def run():
 
     st.divider()
 
-    # -------- JOB STATS --------
+    # ======================================================
+    # JOB STATS
+    # ======================================================
     scraped = get_all_scraped_jobs(limit=5000)
     matched = get_latest_top_matched(limit=5000)
 
@@ -127,7 +133,9 @@ def run():
 
     st.divider()
 
-    # -------- LATEST MATCHED JOBS --------
+    # ======================================================
+    # RECENT MATCHED JOBS
+    # ======================================================
     st.subheader("Latest Matched Jobs")
     if matched:
         st.dataframe(pd.DataFrame(matched).head(3))
@@ -136,7 +144,9 @@ def run():
 
     st.divider()
 
-    # -------- SKILLS PIE CHART --------
+    # ======================================================
+    # SKILL PIE CHART
+    # ======================================================
     st.subheader("Skill Breakdown")
 
     skills = profile.get("skills", {})
@@ -151,7 +161,9 @@ def run():
 
     st.divider()
 
-    # -------- PROJECTS --------
+    # ======================================================
+    # PROJECTS SECTION
+    # ======================================================
     st.subheader("Projects Overview")
 
     for proj in profile.get("projects", []):
@@ -170,7 +182,9 @@ def run():
 
     st.divider()
 
-    # -------- QUICK ACTIONS --------
+    # ======================================================
+    # QUICK ACTION BUTTONS
+    # ======================================================
     st.subheader("Quick Actions")
 
     colX, colY, colZ = st.columns(3)

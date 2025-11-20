@@ -18,7 +18,7 @@ class ResumeTailorAgent:
             raise ValueError("❌ GEMINI_API_KEY not found in environment.")
         genai.configure(api_key=api_key)
 
-        self.gemini_model = genai.GenerativeModel("models/gemini-2.0-flash")
+        self.gemini_model = genai.GenerativeModel("models/gemini-2.0-flash-lite")
         self.model = SentenceTransformer(model_name)
 
     def clean_job_description(self, job_description: str):

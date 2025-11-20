@@ -53,7 +53,8 @@ class JobMatchingAgent:
         combined = " ".join([skills_text, projects_text, achievements_text])
         combined = self.preprocess_text(combined)
 
-        return self.model.encode(combined, convert_to_numpy=True)
+        # FIX — ensure float32
+        return self.model.encode(combined, convert_to_numpy=True).astype("float32")
 
     # ---------------------------------------------------
     # JOBS TEXT → VECTOR
@@ -62,7 +63,6 @@ class JobMatchingAgent:
         job_texts = []
 
         for _, row in jobs_df.iterrows():
-            # skills has priority, fallback to summary
             text = (
                 row.get("skills")
                 or row.get("summary")
@@ -70,14 +70,18 @@ class JobMatchingAgent:
             )
             job_texts.append(self.preprocess_text(str(text)))
 
-        return self.model.encode(job_texts, convert_to_numpy=True)
+        # FIX — ensure float32 embeddings
+        return self.model.encode(job_texts, convert_to_numpy=True).astype("float32")
 
     # ---------------------------------------------------
     # FAISS INDEX
     # ---------------------------------------------------
     def build_faiss_index(self, job_embeddings: np.ndarray):
+        job_embeddings = job_embeddings.astype("float32")  # *** important ***
+
         d = job_embeddings.shape[1]
         index = faiss.IndexFlatIP(d)
+
         faiss.normalize_L2(job_embeddings)
         index.add(job_embeddings)
         return index
@@ -97,32 +101,28 @@ class JobMatchingAgent:
         if job_embeddings.shape[0] == 0:
             raise ValueError("❌ No job embeddings available.")
 
-        # normalize
+        # FIX — ensure float32 everywhere
+        profile_vector = profile_vector.astype("float32")
+        job_embeddings = job_embeddings.astype("float32")
+
+        # normalize profile vector
         faiss.normalize_L2(profile_vector.reshape(1, -1))
 
-        # FAISS search
         index = self.build_faiss_index(job_embeddings)
         D, I = index.search(profile_vector.reshape(1, -1), top_k)
 
         matched = jobs_df.iloc[I[0]].copy().reset_index(drop=True)
         matched["match_score"] = D[0].round(4)
 
-        # --------------------------------------------------------------------
-        # SAVE TOP MATCHES INTO top_matched_jobs TABLE (**YOUR NEW FORMAT**)
-        # --------------------------------------------------------------------
+        # SAVE MATCHES FOR DASHBOARD
         if "db_id" in jobs_df.columns:
             for rank, idx in enumerate(I[0]):
-
                 try:
                     db_id = int(jobs_df.iloc[idx]["db_id"])
                     score = float(D[0][rank])
-
-                    # always store user_id (you asked for Q2 = yes)
                     insert_top_matched(job_id=db_id, user_id=user_id, score=score)
-
                 except Exception as e:
                     print("⚠️ Failed to save top match:", e)
-
         else:
             print("⚠️ WARNING: db_id column missing in jobs_df. Top matches not saved.")
 

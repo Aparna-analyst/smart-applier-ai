@@ -3,7 +3,7 @@ name = "smart-apllier"
 version = "0.1.0"
 description = "LangGraph-based AI Job Agent (Smart Applier)"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12,<3.13"
 dependencies = [
    "streamlit",
    "beautifulsoup4",

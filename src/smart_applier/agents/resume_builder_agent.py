@@ -35,10 +35,24 @@ class ResumeBuilderAgent:
         if api_key:
             try:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel("models/gemini-2.0-flash")
+                self.model = genai.GenerativeModel("models/gemini-2.0-flash-lite")
             except Exception as e:
                 print(f"⚠️ Gemini init failed: {e}")
 
+    # -----------------------------------------------------
+    # SAFE TEXT CONVERTER (Fix for dict → Paragraph crash)
+    # -----------------------------------------------------
+    def safe_text(self, item):
+        """Convert dict/list/anything into clean text for PDF."""
+        if isinstance(item, dict):
+            return ", ".join(f"{k}: {v}" for k, v in item.items())
+        elif isinstance(item, list):
+            return ", ".join(self.safe_text(x) for x in item)
+        return str(item)
+
+    # -----------------------------------------------------
+    # Gemini Summary Generator
+    # -----------------------------------------------------
     def generate_clean_summary(self):
         if not self.model:
             return None
@@ -63,8 +77,10 @@ class ResumeBuilderAgent:
             print(f"⚠️ Gemini summary generation failed: {e}")
             return None
 
+    # -----------------------------------------------------
+    # BUILD RESUME
+    # -----------------------------------------------------
     def build_resume(self) -> io.BytesIO:
-        """Generate PDF in a memory buffer and return BytesIO."""
         doc = SimpleDocTemplate(
             self.buffer,
             pagesize=A4,
@@ -95,7 +111,9 @@ class ResumeBuilderAgent:
 
         elements = []
 
+        # ------------------------------
         # PERSONAL DETAILS
+        # ------------------------------
         personal = self.profile.get("personal", {})
         name = personal.get("name", "Your Name")
         email = personal.get("email", "")
@@ -135,78 +153,92 @@ class ResumeBuilderAgent:
             )
 
         elements.append(Spacer(1, 14))
-        elements.append(
-            HRFlowable(width="100%", color=colors.HexColor("#003366"), thickness=0.6)
-        )
+        elements.append(HRFlowable(width="100%", color=colors.HexColor("#003366"), thickness=0.6))
         elements.append(Spacer(1, 10))
 
+        # ------------------------------
         # SUMMARY
-        summary = self.profile.get("summary")
-        if not summary:
-            summary = self.generate_clean_summary() or (
-                "Results-driven data analyst skilled in Python, Power BI, and cloud analytics."
-            )
+        # ------------------------------
+        summary = self.profile.get("summary") or self.generate_clean_summary() or (
+            "Results-driven data analyst skilled in Python, Power BI, and cloud analytics."
+        )
 
         elements.append(Paragraph("Professional Summary", header_style))
-        elements.append(Paragraph(summary, normal_style))
+        elements.append(Paragraph(self.safe_text(summary), normal_style))
         elements.append(Spacer(1, 12))
         elements.append(HRFlowable(width="100%", color=colors.grey, thickness=0.3))
         elements.append(Spacer(1, 8))
 
+        # ------------------------------
         # EDUCATION
+        # ------------------------------
         education = self.profile.get("education", [])
         if education:
             elements.append(Paragraph("Education", header_style))
             for edu in education:
-                elements.append(Paragraph(edu, normal_style))
+                elements.append(Paragraph(self.safe_text(edu), normal_style))
             elements.append(Spacer(1, 8))
             elements.append(HRFlowable(width="100%", color=colors.grey, thickness=0.3))
             elements.append(Spacer(1, 8))
 
+        # ------------------------------
         # SKILLS
+        # ------------------------------
         skills = self.profile.get("skills", {})
         if skills:
             elements.append(Paragraph("Skills", header_style))
             for cat, items in skills.items():
                 elements.append(
-                    Paragraph(f"<b>{cat}:</b> {', '.join(items)}", normal_style)
+                    Paragraph(f"<b>{cat}:</b> {self.safe_text(items)}", normal_style)
                 )
             elements.append(Spacer(1, 8))
             elements.append(HRFlowable(width="100%", color=colors.grey, thickness=0.3))
             elements.append(Spacer(1, 8))
 
+        # ------------------------------
         # PROJECTS
+        # ------------------------------
         projects = self.profile.get("projects", [])
         if projects:
             elements.append(Paragraph("Projects", header_style))
             for proj in projects:
-                elements.append(Paragraph(f"<b>{proj.get('title','')}</b>", normal_style))
-                if proj.get("description"):
-                    elements.append(Paragraph(proj["description"], bullet_style))
+                title = self.safe_text(proj.get("title", ""))
+                desc = self.safe_text(proj.get("description", ""))
+                elements.append(Paragraph(f"<b>{title}</b>", normal_style))
+                if desc:
+                    elements.append(Paragraph(desc, bullet_style))
                 elements.append(Spacer(1, 6))
             elements.append(HRFlowable(width="100%", color=colors.grey, thickness=0.3))
             elements.append(Spacer(1, 8))
 
+        # ------------------------------
         # EXPERIENCE
+        # ------------------------------
         experience = self.profile.get("experience", [])
         if experience:
             elements.append(Paragraph("Experience", header_style))
             for exp in experience:
-                elements.append(Paragraph(exp, bullet_style))
+                elements.append(Paragraph(self.safe_text(exp), bullet_style))
             elements.append(Spacer(1, 8))
             elements.append(HRFlowable(width="100%", color=colors.grey, thickness=0.3))
             elements.append(Spacer(1, 8))
 
+        # ------------------------------
         # CERTIFICATIONS
+        # ------------------------------
         certs = self.profile.get("certificates", [])
         if certs:
             elements.append(Paragraph("Certifications", header_style))
             for cert in certs:
                 elements.append(
-                    Paragraph(f"{cert.get('name','')} - {cert.get('source','')}", bullet_style)
+                    Paragraph(
+                        f"{self.safe_text(cert.get('name',''))} - {self.safe_text(cert.get('source',''))}",
+                        bullet_style,
+                    )
                 )
             elements.append(Spacer(1, 8))
 
+        # Finalize PDF
         doc.build(elements)
         self.buffer.seek(0)
         return self.buffer
