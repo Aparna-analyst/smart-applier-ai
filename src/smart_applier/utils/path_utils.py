@@ -70,7 +70,7 @@ def ensure_database_exists():
     if dirs["use_in_memory_db"]:
         # In-memory DB is session-specific; initialization should happen where the connection is created.
         # We intentionally do not create a file here.
-        print("🔁 Using in-memory DB for this run (USE_IN_MEMORY_DB enabled).")
+        print(" Using in-memory DB for this run (USE_IN_MEMORY_DB enabled).")
         return
 
     db_path = dirs["db_path"]
@@ -88,5 +88,5 @@ def ensure_database_exists():
     if not db_path.exists():
         # ensure parent exists (should, but be safe)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"🛠️ Creating SQLite DB at: {db_path}")
+        print(f" Creating SQLite DB at: {db_path}")
     initialize_database()  # create_tables should handle connection to the correct path (see db_setup)

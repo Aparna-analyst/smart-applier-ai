@@ -3,7 +3,8 @@ import traceback
 import pandas as pd
 
 from smart_applier.agents.profile_agent import UserProfileAgent
-from smart_applier.agents.job_scraper_agent import JobScraperAgent
+from smart_applier.langgraph.workflow import build_master_workflow
+
 
 # LangGraph Workflows
 from smart_applier.langgraph.subworkflows import (
@@ -11,7 +12,7 @@ from smart_applier.langgraph.subworkflows import (
     build_resume_workflow,
     build_external_jd_workflow,
     build_skill_gap_graph,
-    build_custom_jd_skill_graph,
+    build_custom_jd_skill_graph    
 )
 
 
@@ -41,6 +42,7 @@ def run():
     # Workflow Selection
     # ------------------------------------------------------
     workflows = {
+        "Master Full Pipeline (Everything)": build_master_workflow,               # ✅ NEW
         "Job Scraper Full Workflow": build_job_scraper_workflow,
         "Resume Generation Only": build_resume_workflow,
         "External JD → Tailored Resume": build_external_jd_workflow,
@@ -104,6 +106,15 @@ def run():
                     "Download Resume",
                     data=result["resume_pdf_bytes"],
                     file_name="workflow_resume.pdf",
+                    mime="application/pdf"
+                )
+
+            if result.get("tailored_resume_pdf_bytes"):
+                st.subheader("Tailored Resume PDF")
+                st.download_button(
+                    "Download Tailored Resume",
+                    data=result["tailored_resume_pdf_bytes"],
+                    file_name="workflow_tailored_resume.pdf",
                     mime="application/pdf"
                 )
 
