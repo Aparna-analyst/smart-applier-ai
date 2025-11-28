@@ -46,7 +46,7 @@ def run():
         "Job Scraper Full Workflow": build_job_scraper_workflow,
         "Resume Generation Only": build_resume_workflow,
         "External JD → Tailored Resume": build_external_jd_workflow,
-        "Skill Gap from Scraped Jobs": build_skill_gap_graph,
+        "Skill Gap from Matched jobs": build_skill_gap_graph,
         "Skill Gap from Custom JD": build_custom_jd_skill_graph,
     }
 

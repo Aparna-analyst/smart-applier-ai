@@ -87,7 +87,7 @@ def run():
                             width="100%" height="700px">
                         </iframe>
                     """
-                    st.markdown("### 📄 Tailored Resume Preview")
+                    st.markdown("###  Tailored Resume Preview")
                     st.markdown(pdf_display, unsafe_allow_html=True)
                 except:
                     st.warning("Could not preview PDF inline.")

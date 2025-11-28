@@ -44,6 +44,7 @@ def build_master_workflow():
     graph.add_node("embed_jobs", embed_jobs_node)
     graph.add_node("match_jobs", match_jobs_node)
     graph.add_node("skill_gap", skill_gap_node)
+    graph.add_node("resume_builder", resume_builder_node)
     graph.add_node("tailor_resume", tailor_resume_node)
 
     graph.add_edge("load_profile", "scrape_jobs")
@@ -51,7 +52,8 @@ def build_master_workflow():
     graph.add_edge("embed_profile", "embed_jobs")
     graph.add_edge("embed_jobs", "match_jobs")
     graph.add_edge("match_jobs", "skill_gap")
-    graph.add_edge("skill_gap", "tailor_resume")
+    graph.add_edge("skill_gap", "resume_builder")
+    graph.add_edge("resume_builder", "tailor_resume")
 
     graph.add_edge("tailor_resume", END)
     graph.set_entry_point("load_profile")

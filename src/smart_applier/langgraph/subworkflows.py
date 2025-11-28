@@ -46,24 +46,6 @@ def build_resume_workflow():
 
 
 # ------------------------------
-# Skill Gap Only Workflow
-# ------------------------------
-def build_skillgap_workflow():
-    graph = StateGraph(State)
-
-    graph.add_node("load_profile", load_profile_node)
-    graph.add_node("scrape_jobs", scrape_jobs_node)
-    graph.add_node("skill_gap", skill_gap_node)
-
-    graph.add_edge("load_profile", "scrape_jobs")
-    graph.add_edge("scrape_jobs", "skill_gap")
-    graph.add_edge("skill_gap", END)
-
-    graph.set_entry_point("load_profile")
-    return graph.compile()
-
-
-# ------------------------------
 # External JD Tailoring Workflow
 # ------------------------------
 def build_external_jd_workflow():
@@ -132,10 +114,16 @@ def build_skill_gap_graph():
 
     graph.add_node("load_profile", load_profile_node)
     graph.add_node("scrape_jobs", scrape_jobs_node)
+    graph.add_node("embed_profile", embed_profile_node)
+    graph.add_node("embed_jobs", embed_jobs_node)
+    graph.add_node("match_jobs", match_jobs_node)
     graph.add_node("skill_gap", skill_gap_node)
 
     graph.add_edge("load_profile", "scrape_jobs")
-    graph.add_edge("scrape_jobs", "skill_gap")
+    graph.add_edge("scrape_jobs", "embed_profile")
+    graph.add_edge("embed_profile", "embed_jobs")
+    graph.add_edge("embed_jobs", "match_jobs")
+    graph.add_edge("match_jobs", "skill_gap")
     graph.add_edge("skill_gap", END)
 
     graph.set_entry_point("load_profile")
